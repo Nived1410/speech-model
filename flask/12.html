@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Speech Emotion Recognition Web Demo</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; text-align: center; }
+    button, input { font-size: 17px; padding: 10px; margin: 10px; }
+    #emotion { font-size: 1.5em; color: #223388; margin-top: 30px; font-weight: bold; }
+    #recordingsList audio { margin: 10px 0 10px 20px; }
+  </style>
+</head>
+<body>
+  <h1>Speech Emotion Recognition Demo</h1>
+  <p>Record your voice and detect the emotion:</p>
+  <button id="recordButton">Start Recording</button>
+  <button id="stopButton" disabled>Stop</button>
+  <div id="recordingsList"></div>
+  <div id="emotion"></div>
+
+  <script>
+    let mediaRecorder;
+    let audioChunks = [];
+    const recordButton = document.getElementById('recordButton');
+    const stopButton = document.getElementById('stopButton');
+    const emotionDiv = document.getElementById('emotion');
+    const recordingsList = document.getElementById('recordingsList');
+
+    recordButton.onclick = async () => {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      audioChunks = [];
+      mediaRecorder.start();
+
+      recordButton.disabled = true;
+      stopButton.disabled = false;
+
+      mediaRecorder.ondataavailable = e => {
+        audioChunks.push(e.data);
+      };
+    };
+
+    stopButton.onclick = () => {
+      mediaRecorder.stop();
+      mediaRecorder.onstop = async () => {
+        recordButton.disabled = false;
+        stopButton.disabled = true;
+
+        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = document.createElement('audio');
+        audio.controls = true;
+        audio.src = audioUrl;
+        recordingsList.innerHTML = '';
+        recordingsList.appendChild(audio);
+
+        // Send audio to backend for emotion prediction
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'recording.wav');
+
+        emotionDiv.textContent = "Analyzing...";
+        try {
+          const response = await fetch('/predict', {
+            method: 'POST',
+            body: formData
+          });
+          const data = await response.json();
+          emotionDiv.textContent = "Prediction: " + data.emotion +
+            (data.confidence ? ` (Confidence: ${Math.round(data.confidence * 100)}%)` : '');
+        } catch (err) {
+          emotionDiv.textContent = "Error: Could not analyze emotion.";
+        }
+      };
+    };
+  </script>
+</body>
+</html>
